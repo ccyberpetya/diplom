@@ -15,8 +15,10 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from backend.views import admin_import_view  # Добавьте этот импорт
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/v1/', include('backend.urls', namespace='backend'))
+    path('api/v1/', include('backend.urls', namespace='backend')),
+    path('admin/import/', admin_import_view, name='admin-import'),
 ]

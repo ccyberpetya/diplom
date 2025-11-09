@@ -1,0 +1,19 @@
+# 1. Клонируйте проект
+git clone <repository-url>
+cd <project-directory>
+
+# 2. Создайте .env файл из примера
+cp .env.example .env
+
+# 3. Заполните .env файл реальными значениями
+
+# 4. Запустите сборку
+docker-compose up --build
+
+# 5. Примените миграции (если не сработало автоматически)
+docker-compose exec web python manage.py migrate
+
+# 6. Создайте суперпользователя
+docker-compose exec web python manage.py createsuperuser
+
+# 7. Приложение будет доступно по http://localhost:8000

@@ -7,6 +7,7 @@ from django.core.validators import URLValidator
 from django.db import IntegrityError
 from django.db.models import Q, Sum, F
 from django.http import JsonResponse
+from django.contrib.admin.views.decorators import staff_member_required
 from requests import get
 from rest_framework.authtoken.models import Token
 from rest_framework.generics import ListAPIView
@@ -20,6 +21,7 @@ from backend.models import Shop, Category, Product, ProductInfo, Parameter, Prod
 from backend.serializers import UserSerializer, CategorySerializer, ShopSerializer, ProductInfoSerializer, \
     OrderItemSerializer, OrderSerializer, ContactSerializer
 from backend.signals import new_user_registered, new_order
+from backend.celery_app import do_import
 
 
 class RegisterAccount(APIView):
@@ -396,18 +398,12 @@ class BasketView(APIView):
 
 class PartnerUpdate(APIView):
     """
-    A class for updating partner information.
-
-    Methods:
-    - post: Update the partner information.
-
-    Attributes:
-    - None
+    A class for updating partner information with async import
     """
 
     def post(self, request, *args, **kwargs):
         """
-                Update the partner price list information.
+                Update the partner price list information asynchronously.
 
                 Args:
                 - request (Request): The Django request object.
@@ -429,33 +425,15 @@ class PartnerUpdate(APIView):
             except ValidationError as e:
                 return JsonResponse({'Status': False, 'Error': str(e)})
             else:
-                stream = get(url).content
+                shop = request.user.shop
+                # Запускаем асинхронную задачу импорта
+                task = do_import.delay(shop.id, url, request.user.id)
 
-                data = load_yaml(stream, Loader=Loader)
-
-                shop, _ = Shop.objects.get_or_create(name=data['shop'], user_id=request.user.id)
-                for category in data['categories']:
-                    category_object, _ = Category.objects.get_or_create(id=category['id'], name=category['name'])
-                    category_object.shops.add(shop.id)
-                    category_object.save()
-                ProductInfo.objects.filter(shop_id=shop.id).delete()
-                for item in data['goods']:
-                    product, _ = Product.objects.get_or_create(name=item['name'], category_id=item['category'])
-
-                    product_info = ProductInfo.objects.create(product_id=product.id,
-                                                              external_id=item['id'],
-                                                              model=item['model'],
-                                                              price=item['price'],
-                                                              price_rrc=item['price_rrc'],
-                                                              quantity=item['quantity'],
-                                                              shop_id=shop.id)
-                    for name, value in item['parameters'].items():
-                        parameter_object, _ = Parameter.objects.get_or_create(name=name)
-                        ProductParameter.objects.create(product_info_id=product_info.id,
-                                                        parameter_id=parameter_object.id,
-                                                        value=value)
-
-                return JsonResponse({'Status': True})
+                return JsonResponse({
+                    'Status': True,
+                    'TaskID': task.id,
+                    'Message': 'Import started asynchronously'
+                })
 
         return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
 
@@ -470,6 +448,7 @@ class PartnerState(APIView):
        Attributes:
        - None
        """
+
     # получить текущий статус
     def get(self, request, *args, **kwargs):
         """
@@ -644,16 +623,16 @@ class ContactView(APIView):
 
     # редактировать контакт
     def put(self, request, *args, **kwargs):
+        """
+               Update the contact information of the authenticated user.
+
+               Args:
+               - request (Request): The Django request object.
+
+               Returns:
+               - JsonResponse: The response indicating the status of the operation and any errors.
+               """
         if not request.user.is_authenticated:
-            """
-                   Update the contact information of the authenticated user.
-
-                   Args:
-                   - request (Request): The Django request object.
-
-                   Returns:
-                   - JsonResponse: The response indicating the status of the operation and any errors.
-                   """
             return JsonResponse({'Status': False, 'Error': 'Log in required'}, status=403)
 
         if 'id' in request.data:
@@ -736,3 +715,38 @@ class OrderView(APIView):
                         return JsonResponse({'Status': True})
 
         return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+
+
+@staff_member_required
+def admin_import_view(request):
+    """
+    View для запуска Celery-задачи do_import из админки
+    """
+    if request.method == 'POST':
+        shop_id = request.POST.get('shop_id')
+        url = request.POST.get('url')
+        user_id = request.user.id
+
+        if shop_id and url:
+            try:
+                task = do_import.delay(int(shop_id), url, user_id)
+                return JsonResponse({
+                    'status': 'success',
+                    'task_id': task.id,
+                    'message': 'Import task started successfully'
+                })
+            except Exception as e:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': str(e)
+                })
+        else:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'shop_id and url are required'
+            })
+
+    return JsonResponse({
+        'status': 'error',
+        'message': 'Only POST method allowed'
+    })
