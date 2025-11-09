@@ -580,9 +580,10 @@ class ContactView(APIView):
             return JsonResponse({'Status': False, 'Error': 'Log in required'}, status=403)
 
         if {'city', 'street', 'phone'}.issubset(request.data):
-            request.data._mutable = True
-            request.data.update({'user': request.user.id})
-            serializer = ContactSerializer(data=request.data)
+            # Создаем копию данных и добавляем user_id
+            contact_data = request.data.copy()
+            contact_data['user'] = request.user.id
+            serializer = ContactSerializer(data=contact_data)
 
             if serializer.is_valid():
                 serializer.save()
