@@ -307,10 +307,14 @@ class BasketView(APIView):
         if not request.user.is_authenticated:
             return JsonResponse({'Status': False, 'Error': 'Log in required'}, status=403)
 
-        items_sting = request.data.get('items')
-        if items_sting:
+        items_data = request.data.get('items')
+        if items_data:
             try:
-                items_dict = load_json(items_sting)
+                # Если items уже словарь, используем как есть
+                if isinstance(items_data, str):
+                    items_dict = load_json(items_data)
+                else:
+                    items_dict = items_data
             except ValueError:
                 return JsonResponse({'Status': False, 'Errors': 'Неверный формат запроса'})
             else:
@@ -701,7 +705,8 @@ class OrderView(APIView):
             return JsonResponse({'Status': False, 'Error': 'Log in required'}, status=403)
 
         if {'id', 'contact'}.issubset(request.data):
-            if request.data['id'].isdigit():
+            if isinstance(request.data['id'], int) or (
+                    isinstance(request.data['id'], str) and request.data['id'].isdigit()):
                 try:
                     is_updated = Order.objects.filter(
                         user_id=request.user.id, id=request.data['id']).update(
