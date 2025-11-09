@@ -1,5 +1,6 @@
 from typing import Type
 from django.conf import settings
+from django.core.mail import EmailMultiAlternatives
 from django.db.models.signals import post_save
 from django.dispatch import receiver, Signal
 from django_rest_passwordreset.signals import reset_password_token_created
@@ -12,40 +13,49 @@ new_order = Signal()
 
 @receiver(reset_password_token_created)
 def password_reset_token_created(sender, instance, reset_password_token, **kwargs):
-    """
-    ВРЕМЕННО ОТКЛЮЧЕНО: Отправляем письмо с токеном для сброса пароля
-    """
-    print(f"[DEBUG] Password reset token for {reset_password_token.user}: {reset_password_token.key}")
-    # send_email.delay(
-    #     subject=f"Password Reset Token for {reset_password_token.user}",
-    #     message=reset_password_token.key,
-    #     from_email=settings.EMAIL_HOST_USER,
-    #     recipient_list=[reset_password_token.user.email]
-    # )
+    from backend.models import User  # Импорт внутри функции
+    try:
+        msg = EmailMultiAlternatives(
+            subject=f"Password Reset Token for {reset_password_token.user}",
+            body=reset_password_token.key,
+            from_email=settings.EMAIL_HOST_USER,
+            to=[reset_password_token.user.email]
+        )
+        msg.send()
+        print(f"[EMAIL SENT] Password reset to {reset_password_token.user.email}")
+    except Exception as e:
+        print(f"[EMAIL ERROR] {e}")
 
+@receiver(post_save)
+def new_user_registered_signal(sender, instance, created, **kwargs):
+    from backend.models import User, ConfirmEmailToken  # Импорт внутри функции
+    if sender == User and created and not instance.is_active:
+        token, _ = ConfirmEmailToken.objects.get_or_create(user_id=instance.pk)
+        try:
+            msg = EmailMultiAlternatives(
+                subject=f"Confirm Email for {instance.email}",
+                body=f"Your confirmation token: {token.key}",
+                from_email=settings.EMAIL_HOST_USER,
+                to=[instance.email]
+            )
+            msg.send()
+            print(f"[EMAIL SENT] Confirmation to {instance.email}")
+        except Exception as e:
+            print(f"[EMAIL ERROR] {e}")
 
-@receiver(post_save, sender=User)
-def new_user_registered_signal(sender: Type[User], instance: User, created: bool, **kwargs):
-    if created and not instance.is_active:
-        # Активируем пользователя без подтверждения для тестирования
-        instance.is_active = True
-        instance.save()
-        print(f"[DEBUG] User {instance.email} activated automatically for testing")
-
-        # token, _ = ConfirmEmailToken.objects.get_or_create(user_id=instance.pk)
-        # print(f"[DEBUG] Confirm email token for {instance.email}: {token.key}")
 
 @receiver(new_order)
 def new_order_signal(user_id, **kwargs):
-    """
-    ВРЕМЕННО ОТКЛЮЧЕНО: Отправляем письмо при изменении статуса заказа
-    """
+    from backend.models import User  # Импорт внутри функции
     user = User.objects.get(id=user_id)
-    print(f"[DEBUG] New order for user: {user.email}")
-
-    # send_email.delay(
-    #     subject="Обновление статуса заказа",
-    #     message='Заказ сформирован',
-    #     from_email=settings.EMAIL_HOST_USER,
-    #     recipient_list=[user.email]
-    # )
+    try:
+        msg = EmailMultiAlternatives(
+            subject="Order Created Successfully",
+            body='Your order has been created successfully',
+            from_email=settings.EMAIL_HOST_USER,
+            to=[user.email]
+        )
+        msg.send()
+        print(f"[EMAIL SENT] Order notification to {user.email}")
+    except Exception as e:
+        print(f"[EMAIL ERROR] {e}")
