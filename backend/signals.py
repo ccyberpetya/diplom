@@ -26,20 +26,14 @@ def password_reset_token_created(sender, instance, reset_password_token, **kwarg
 
 @receiver(post_save, sender=User)
 def new_user_registered_signal(sender: Type[User], instance: User, created: bool, **kwargs):
-    """
-    ВРЕМЕННО ОТКЛЮЧЕНО: Отправляем письмо с подтверждением почты
-    """
     if created and not instance.is_active:
-        token, _ = ConfirmEmailToken.objects.get_or_create(user_id=instance.pk)
-        print(f"[DEBUG] Confirm email token for {instance.email}: {token.key}")
+        # Активируем пользователя без подтверждения для тестирования
+        instance.is_active = True
+        instance.save()
+        print(f"[DEBUG] User {instance.email} activated automatically for testing")
 
-        # send_email.delay(
-        #     subject=f"Password Reset Token for {instance.email}",
-        #     message=token.key,
-        #     from_email=settings.EMAIL_HOST_USER,
-        #     recipient_list=[instance.email]
-        # )
-
+        # token, _ = ConfirmEmailToken.objects.get_or_create(user_id=instance.pk)
+        # print(f"[DEBUG] Confirm email token for {instance.email}: {token.key}")
 
 @receiver(new_order)
 def new_order_signal(user_id, **kwargs):
