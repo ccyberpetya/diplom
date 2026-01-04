@@ -1,6 +1,5 @@
-# Верстальщик
+# backend/serializers.py
 from rest_framework import serializers
-
 from backend.models import User, Category, Shop, ProductInfo, Product, ProductParameter, OrderItem, Order, Contact
 
 
@@ -16,11 +15,32 @@ class ContactSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     contacts = ContactSerializer(read_only=True, many=True)
+    avatar_url = serializers.SerializerMethodField()
+    avatar_thumbnail = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ('id', 'first_name', 'last_name', 'email', 'company', 'position', 'contacts')
-        read_only_fields = ('id',)
+        fields = ('id', 'first_name', 'last_name', 'email', 'company', 'position',
+                  'contacts', 'avatar', 'avatar_url', 'avatar_thumbnail', 'type')
+        read_only_fields = ('id', 'avatar_url', 'avatar_thumbnail')
+        extra_kwargs = {
+            'avatar': {'write_only': True},
+            'password': {'write_only': True}
+        }
+
+    def get_avatar_url(self, obj):
+        """Получить полный URL аватара"""
+        request = self.context.get('request')
+        if obj.avatar and request:
+            return request.build_absolute_uri(obj.avatar.url)
+        return None
+
+    def get_avatar_thumbnail(self, obj):
+        """Получить URL миниатюры аватара"""
+        request = self.context.get('request')
+        if obj.avatar and request:
+            return request.build_absolute_uri(obj.get_avatar_thumbnail((100, 100)))
+        return None
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -33,7 +53,7 @@ class CategorySerializer(serializers.ModelSerializer):
 class ShopSerializer(serializers.ModelSerializer):
     class Meta:
         model = Shop
-        fields = ('id', 'name', 'state',)
+        fields = ('id', 'name', 'state', 'url', 'user')
         read_only_fields = ('id',)
 
 
@@ -42,7 +62,7 @@ class ProductSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Product
-        fields = ('name', 'category',)
+        fields = ('id', 'name', 'category')
 
 
 class ProductParameterSerializer(serializers.ModelSerializer):
@@ -56,6 +76,7 @@ class ProductParameterSerializer(serializers.ModelSerializer):
 class ProductInfoSerializer(serializers.ModelSerializer):
     product = ProductSerializer(read_only=True)
     product_parameters = ProductParameterSerializer(read_only=True, many=True)
+    shop = ShopSerializer(read_only=True)
 
     class Meta:
         model = ProductInfo
@@ -79,7 +100,6 @@ class OrderItemCreateSerializer(OrderItemSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     ordered_items = OrderItemCreateSerializer(read_only=True, many=True)
-
     total_sum = serializers.IntegerField()
     contact = ContactSerializer(read_only=True)
 
