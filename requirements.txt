@@ -6,3 +6,4 @@ redis==5.0.1
 ujson==5.8.0
 PyYAML==6.0.1
 requests==2.31.0
+drf-spectacular==0.27.1  # Документация API
